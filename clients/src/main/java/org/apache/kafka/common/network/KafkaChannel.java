@@ -122,6 +122,7 @@ public class KafkaChannel {
         if (this.send != null)
             throw new IllegalStateException("Attempt to begin a send operation with prior send operation still in progress.");
         this.send = send;
+        // 监听 OP_WRITE
         this.transportLayer.addInterestOps(SelectionKey.OP_WRITE);
     }
 
@@ -132,8 +133,10 @@ public class KafkaChannel {
             receive = new NetworkReceive(maxReceiveSize, id);
         }
 
+        // 接收响应消息
         receive(receive);
         if (receive.complete()) {
+            // 复位
             receive.payload().rewind();
             result = receive;
             receive = null;
@@ -157,6 +160,7 @@ public class KafkaChannel {
     private boolean send(Send send) throws IOException {
         send.writeTo(transportLayer);
         if (send.completed())
+            // 移除 OP_WRITE
             transportLayer.removeInterestOps(SelectionKey.OP_WRITE);
 
         return send.completed();

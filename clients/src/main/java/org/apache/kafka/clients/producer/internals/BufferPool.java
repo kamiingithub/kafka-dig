@@ -46,8 +46,11 @@ public final class BufferPool {
     private final long totalMemory;
     private final int poolableSize;
     private final ReentrantLock lock;
+    // free只管理标准大小的 byteBuffer
     private final Deque<ByteBuffer> free;
     private final Deque<Condition> waiters;
+    // availableMemory = totalMemory - n*poolableSize
+    // n代表free队列中的ByteBuffer的数量，不管有没有被分配给batch
     private long availableMemory;
     private final Metrics metrics;
     private final Time time;
@@ -99,6 +102,7 @@ public final class BufferPool {
         this.lock.lock();
         try {
             // check if we have a free buffer of the right size pooled
+            // 标准大小的请求 可以从free中分配内存
             if (size == poolableSize && !this.free.isEmpty())
                 return this.free.pollFirst();
 
@@ -111,9 +115,11 @@ public final class BufferPool {
                 freeUp(size);
                 this.availableMemory -= size;
                 lock.unlock();
+                // 自己从buffer pool中分配内存
                 return ByteBuffer.allocate(size);
             } else {
                 // we are out of memory and will have to block
+                // 内存不够，就阻塞
                 int accumulated = 0;
                 ByteBuffer buffer = null;
                 Condition moreMemory = this.lock.newCondition();

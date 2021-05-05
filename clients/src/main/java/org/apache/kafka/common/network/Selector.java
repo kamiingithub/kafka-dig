@@ -165,6 +165,7 @@ public class Selector implements Selectable {
         socket.setTcpNoDelay(true);
         boolean connected;
         try {
+            // 原生nio的 connect
             connected = socketChannel.connect(address);
         } catch (UnresolvedAddressException e) {
             socketChannel.close();
@@ -173,9 +174,13 @@ public class Selector implements Selectable {
             socketChannel.close();
             throw e;
         }
+        // 注册connect事件到 selector
         SelectionKey key = socketChannel.register(nioSelector, SelectionKey.OP_CONNECT);
+        // 组装成KafkaChannel
         KafkaChannel channel = channelBuilder.buildChannel(id, key, maxReceiveSize);
         key.attach(channel);
+
+        // 缓存
         this.channels.put(id, channel);
 
         if (connected) {
@@ -274,6 +279,7 @@ public class Selector implements Selectable {
 
         /* check ready keys */
         long startSelect = time.nanoseconds();
+        // 调用nio的 selector#select 获取准备好的selectionKeys
         int readyKeys = select(timeout);
         long endSelect = time.nanoseconds();
         currentTimeNanos = endSelect;
@@ -284,6 +290,7 @@ public class Selector implements Selectable {
             pollSelectionKeys(immediatelyConnectedKeys, true);
         }
 
+        // 清空staged，并把staged中每个KafkaChannel的第一个响应包 移到 completed中
         addToCompletedReceives();
 
         long endIo = time.nanoseconds();
@@ -296,16 +303,21 @@ public class Selector implements Selectable {
         while (iterator.hasNext()) {
             SelectionKey key = iterator.next();
             iterator.remove();
+            // 拿到KafkaChannel
             KafkaChannel channel = channel(key);
 
             // register all per-connection metrics at once
             sensors.maybeRegisterConnectionMetrics(channel.id());
+            // 放进 lru
             lruConnections.put(channel.id(), currentTimeNanos);
 
             try {
 
                 /* complete any connections that have finished their handshake (either normally or immediately) */
+                // OP_CONNECT
                 if (isImmediatelyConnected || key.isConnectable()) {
+                    // 完成连接？
+                    //【调用nio的socketChannel#finishConnect，并监听 OP_READ 事件】
                     if (channel.finishConnect()) {
                         this.connected.add(channel.id());
                         this.sensors.connectionCreated.record();
@@ -318,13 +330,19 @@ public class Selector implements Selectable {
                     channel.prepare();
 
                 /* if channel is ready read from any connections that have readable data */
+                // OP_READ
+                // true && 可读 && staged中不包含该channel
                 if (channel.ready() && key.isReadable() && !hasStagedReceive(channel)) {
                     NetworkReceive networkReceive;
+                    // 循环读响应包
+                    // 处理粘包、拆包
                     while ((networkReceive = channel.read()) != null)
+                        // 当读取到一个完整的包的时候，才会走到这里
                         addToStagedReceives(channel, networkReceive);
                 }
 
                 /* if channel is ready write to any sockets that have space in their buffer and for which we have data */
+                // OP_WRITE
                 if (channel.ready() && key.isWritable()) {
                     Send send = channel.write();
                     if (send != null) {
@@ -559,6 +577,7 @@ public class Selector implements Selectable {
                 if (!channel.isMute()) {
                     Deque<NetworkReceive> deque = entry.getValue();
                     NetworkReceive networkReceive = deque.poll();
+                    // 仅仅取第一个响应包
                     this.completedReceives.add(networkReceive);
                     this.sensors.recordBytesReceived(channel.id(), networkReceive.payload().limit());
                     if (deque.isEmpty())
