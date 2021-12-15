@@ -40,6 +40,7 @@ final class ClusterConnectionStates {
         if (state == null)
             return true;
         else
+            // 超过重试时间
             return state.state == ConnectionState.DISCONNECTED && now - state.lastConnectAttemptMs >= this.reconnectBackoffMs;
     }
 

@@ -26,7 +26,7 @@ buildscript {
     // For Apache Rat plugin to ignore non-Git files
     classpath "org.ajoberstar:grgit:1.5.0"
     classpath 'com.github.ben-manes:gradle-versions-plugin:0.12.0'
-    classpath 'org.scoverage:gradle-scoverage:2.1.0'
+    classpath 'org.scoverage:gradle-scoverage:2.5.0'
   }
 }
 
@@ -288,10 +288,10 @@ task jacocoRootReport(type: org.gradle.testing.jacoco.tasks.JacocoReport) {
   description = 'Generates an aggregate report from all subprojects'
   dependsOn(javaProjects.test)
 
-  additionalSourceDirs = files(javaProjects.sourceSets.main.allSource.srcDirs)
-  sourceDirectories = files(javaProjects.sourceSets.main.allSource.srcDirs)
-  classDirectories =  files(javaProjects.sourceSets.main.output)
-  executionData = files(javaProjects.jacocoTestReport.executionData)
+//  additionalSourceDirs = files(javaProjects.sourceSets.main.allSource.srcDirs)
+//  sourceDirectories = files(javaProjects.sourceSets.main.allSource.srcDirs)
+//  classDirectories =  files(javaProjects.sourceSets.main.output)
+//  executionData = files(javaProjects.jacocoTestReport.executionData)
 
   reports {
     html.enabled = true

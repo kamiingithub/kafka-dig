@@ -79,6 +79,7 @@ public class NetworkReceive implements Receive {
         int read = 0;
         // size = 一个包的长度
         if (size.hasRemaining()) {
+            // 4字节
             int bytesRead = channel.read(size);
             if (bytesRead < 0)
                 throw new EOFException();

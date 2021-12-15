@@ -135,7 +135,7 @@ public class KafkaChannel {
 
         // 接收响应消息
         receive(receive);
-        if (receive.complete()) {
+        if (receive.complete()) {// 这个包是否读完
             // 复位
             receive.payload().rewind();
             result = receive;
@@ -146,10 +146,12 @@ public class KafkaChannel {
 
     public Send write() throws IOException {
         Send result = null;
+        // 发送
         if (send != null && send(send)) {
             result = send;
             send = null;
         }
+        // 如果一个request发完了，就返回true
         return result;
     }
 

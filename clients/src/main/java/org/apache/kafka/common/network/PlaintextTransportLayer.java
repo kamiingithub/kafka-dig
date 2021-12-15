@@ -48,6 +48,7 @@ public class PlaintextTransportLayer implements TransportLayer {
 
     @Override
     public boolean finishConnect() throws IOException {
+        // 完成connect？
         boolean connected = socketChannel.finishConnect();
         if (connected)
             // 1000 & 0111 = 0000

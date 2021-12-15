@@ -44,6 +44,7 @@ import org.apache.kafka.common.utils.Time;
 public final class BufferPool {
 
     private final long totalMemory;
+    // 可复用内存的大小 默认16k
     private final int poolableSize;
     private final ReentrantLock lock;
     // free只管理标准大小的 byteBuffer
@@ -102,7 +103,7 @@ public final class BufferPool {
         this.lock.lock();
         try {
             // check if we have a free buffer of the right size pooled
-            // 标准大小的请求 可以从free中分配内存
+            // 标准大小(16k)的请求 可以从free中分配内存
             if (size == poolableSize && !this.free.isEmpty())
                 return this.free.pollFirst();
 
@@ -132,6 +133,7 @@ public final class BufferPool {
                     long timeNs;
                     boolean waitingTimeElapsed;
                     try {
+                        // 阻塞
                         waitingTimeElapsed = !moreMemory.await(remainingTimeToBlockNs, TimeUnit.NANOSECONDS);
                     } catch (InterruptedException e) {
                         this.waiters.remove(moreMemory);
@@ -142,6 +144,7 @@ public final class BufferPool {
                         this.waitTime.record(timeNs, time.milliseconds());
                     }
 
+                    // 阻塞超时
                     if (waitingTimeElapsed) {
                         this.waiters.remove(moreMemory);
                         throw new TimeoutException("Failed to allocate memory within the configured max blocking time " + maxTimeToBlockMs + " ms.");

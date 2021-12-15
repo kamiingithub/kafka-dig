@@ -245,6 +245,7 @@ public class NetworkClient implements KafkaClient {
         request.setSendTimeMs(now);
         // 放进 inFlight
         this.inFlightRequests.add(request);
+        // 把request暂存到KafkaChannel
         selector.send(request.request());
     }
 
@@ -271,8 +272,8 @@ public class NetworkClient implements KafkaClient {
         // process completed actions
         long updatedNow = this.time.milliseconds();
         List<ClientResponse> responses = new ArrayList<>();
-        handleCompletedSends(responses, updatedNow);// 处理发送
-        handleCompletedReceives(responses, updatedNow);// 处理响应
+        handleCompletedSends(responses, updatedNow);// 处理完成的发送
+        handleCompletedReceives(responses, updatedNow);// 处理完成的响应
         handleDisconnections(responses, updatedNow);// 处理失连
         handleConnections();// 处理连接
         handleTimedOutRequests(responses, updatedNow);// 处理超时
@@ -437,7 +438,7 @@ public class NetworkClient implements KafkaClient {
         for (Send send : this.selector.completedSends()) {
             ClientRequest request = this.inFlightRequests.lastSent(send.destination());
             if (!request.expectResponse()) {
-                // 如果 ack == 0，则直接从inFlight里移除
+                // 如果 ack == 0，则直接从inFlight的队头移除
                 this.inFlightRequests.completeLastSent(send.destination());
                 responses.add(new ClientResponse(request, now, false, null));
             }
@@ -453,9 +454,11 @@ public class NetworkClient implements KafkaClient {
     private void handleCompletedReceives(List<ClientResponse> responses, long now) {
         for (NetworkReceive receive : this.selector.completedReceives()) {
             String source = receive.source();
+            // 从队尾取
             ClientRequest req = inFlightRequests.completeNext(source);
             Struct body = parseResponse(receive.payload(), req.request().header());
             if (!metadataUpdater.maybeHandleCompletedReceive(req, now, body))
+                // 放进response
                 responses.add(new ClientResponse(req, now, false, body));
         }
     }

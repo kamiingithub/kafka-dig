@@ -183,6 +183,7 @@ public class Selector implements Selectable {
         // 缓存
         this.channels.put(id, channel);
 
+        // 非阻塞，不走这里
         if (connected) {
             // OP_CONNECT won't trigger for immediately connected channels
             log.debug("Immediately connected to node {}", channel.id());
@@ -274,6 +275,8 @@ public class Selector implements Selectable {
 
         clear();
 
+        // 有处理到一半的响应(正在监听OP_READ) ｜｜ 有要connect的node
+        // 就不设置select的等待时间
         if (hasStagedReceives() || !immediatelyConnectedKeys.isEmpty())
             timeout = 0;
 
@@ -285,12 +288,14 @@ public class Selector implements Selectable {
         currentTimeNanos = endSelect;
         this.sensors.selectTime.record(endSelect - startSelect, time.milliseconds());
 
+        // 有select到事件 ｜｜ 要建立连接
         if (readyKeys > 0 || !immediatelyConnectedKeys.isEmpty()) {
+            // 处理connect read write
             pollSelectionKeys(this.nioSelector.selectedKeys(), false);
             pollSelectionKeys(immediatelyConnectedKeys, true);
         }
 
-        // 清空staged，并把staged中每个KafkaChannel的第一个响应包 移到 completed中
+        // 清空staged，并把响应包都移到 completedReceives中
         addToCompletedReceives();
 
         long endIo = time.nanoseconds();
@@ -314,7 +319,7 @@ public class Selector implements Selectable {
             try {
 
                 /* complete any connections that have finished their handshake (either normally or immediately) */
-                // OP_CONNECT
+                // 同步connect？ ｜｜ OP_CONNECT
                 if (isImmediatelyConnected || key.isConnectable()) {
                     // 完成连接？
                     //【调用nio的socketChannel#finishConnect，并监听 OP_READ 事件】
@@ -574,10 +579,10 @@ public class Selector implements Selectable {
             while (iter.hasNext()) {
                 Map.Entry<KafkaChannel, Deque<NetworkReceive>> entry = iter.next();
                 KafkaChannel channel = entry.getKey();
-                if (!channel.isMute()) {
+                if (!channel.isMute()) {// 可读
                     Deque<NetworkReceive> deque = entry.getValue();
                     NetworkReceive networkReceive = deque.poll();
-                    // 仅仅取第一个响应包
+                    // 移到completedReceives
                     this.completedReceives.add(networkReceive);
                     this.sensors.recordBytesReceived(channel.id(), networkReceive.payload().limit());
                     if (deque.isEmpty())

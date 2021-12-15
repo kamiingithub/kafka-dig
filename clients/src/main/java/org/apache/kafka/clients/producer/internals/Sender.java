@@ -185,7 +185,7 @@ public class Sender implements Runnable {
         long notReadyTimeout = Long.MAX_VALUE;
         while (iter.hasNext()) {
             Node node = iter.next();
-            // 判断node是否准备好？能connect，就发起connect并组装kafkaChannel，不然就移除node
+            // 判断node是否准备好？没ready，就发起connect并移除node
             if (!this.client.ready(node, now)) {
                 iter.remove();
                 notReadyTimeout = Math.min(notReadyTimeout, this.client.connectionDelay(node, now));
@@ -198,6 +198,8 @@ public class Sender implements Runnable {
                                                                          result.readyNodes,
                                                                          this.maxRequestSize,
                                                                          now);
+
+        // inflight == 1
         if (guaranteeMessageOrder) {
             // Mute all the partitions drained
             for (List<RecordBatch> batchList : batches.values()) {
@@ -226,7 +228,7 @@ public class Sender implements Runnable {
             pollTimeout = 0;
         }
         for (ClientRequest request : requests)
-            // 发送！！
+            // 暂存request到KafkaChannel并注册OP_WRITE
             client.send(request, now);
 
         // if some partitions are already ready to be sent, the select time would be 0;

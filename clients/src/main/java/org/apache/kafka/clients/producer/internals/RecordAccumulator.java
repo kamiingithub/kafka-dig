@@ -175,16 +175,18 @@ public final class RecordAccumulator {
                 // 尝试把record加到batch里
                 RecordAppendResult appendResult = tryAppend(timestamp, key, value, callback, dq);
                 if (appendResult != null)
+                    // 成功append到已有的batch里
                     return appendResult;
             }
 
             // we don't have an in-progress record batch try to allocate a new batch
             // 没有可用的batch，所以分配个新的batch
-            // 比batchSize小就用batchSize， 否则用大的
+            // 比batchSize小就用batchSize， 否则用真实的大小
             int size = Math.max(this.batchSize, Records.LOG_OVERHEAD + Record.recordSize(key, value));
             log.trace("Allocating a new {} byte message buffer for topic {} partition {}", size, tp.topic(), tp.partition());
             // 分配内存buffer（batchSize的从free中拿内存，否则从buffer pool中的其他地方分配内存）
             ByteBuffer buffer = free.allocate(size, maxTimeToBlock);
+            // 这里用了dp的分段锁
             synchronized (dq) {
                 // Need to check if producer is closed again after grabbing the dequeue lock.
                 if (closed)
@@ -194,13 +196,14 @@ public final class RecordAccumulator {
                 RecordAppendResult appendResult = tryAppend(timestamp, key, value, callback, dq);
                 if (appendResult != null) {
                     // Somebody else found us a batch, return the one we waited for! Hopefully this doesn't happen often...
-                    // 线程A能走到这里说明：1）线程A之前是没有可用的batch的 2）其他线程正好创建了batch 3）所以这时线程A申请的buffer就没用了，释放掉
+                    // 线程A能走到这里说明：1）线程A之前是没有可用的batch的 2）其他线程正好在上面的分段锁之间创建了batch 3）所以这时线程A申请的buffer就没用了，释放掉
                     free.deallocate(buffer);
                     return appendResult;
                 }
                 MemoryRecords records = MemoryRecords.emptyRecords(buffer, compression, this.batchSize);
                 // 构造新batch
                 RecordBatch batch = new RecordBatch(tp, records, time.milliseconds());
+                // append进这个batch
                 FutureRecordMetadata future = Utils.notNull(batch.tryAppend(timestamp, key, value, callback, time.milliseconds()));
 
                 // 加到deque尾部
@@ -325,10 +328,11 @@ public final class RecordAccumulator {
                     // 取头
                     RecordBatch batch = deque.peekFirst();
                     if (batch != null) {
-                        // 需要重试但未到时间
+                        // 正在重试但未到时间
                         boolean backingOff = batch.attempts > 0 && batch.lastAttemptMs + retryBackoffMs > nowMs;
                         long waitedTimeMs = nowMs - batch.lastAttemptMs;
                         long timeToWaitMs = backingOff ? retryBackoffMs : lingerMs;
+                        // 剩余时间
                         long timeLeftMs = Math.max(timeToWaitMs - waitedTimeMs, 0);
                         // batch是否满了
                         boolean full = deque.size() > 1 || batch.records.isFull();
@@ -402,6 +406,7 @@ public final class RecordAccumulator {
                         synchronized (deque) {
                             RecordBatch first = deque.peekFirst();
                             if (first != null) {
+                                // 正在重试
                                 boolean backoff = first.attempts > 0 && first.lastAttemptMs + retryBackoffMs > now;
                                 // Only drain the batch if it is not during backoff period.
                                 if (!backoff) {
