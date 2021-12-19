@@ -85,7 +85,8 @@ abstract class AbstractFetcherThread(name: String,
 
   override def doWork() {
 
-    val fetchRequest = inLock(partitionMapLock) {
+      val fetchRequest = inLock(partitionMapLock) {
+      // 针对leader partition都在某个broker上的一批follower partition构建拉取request
       val fetchRequest = buildFetchRequest(partitionMap)
       if (fetchRequest.isEmpty) {
         trace("There are no active partitions. Back off for %d ms before sending a fetch request".format(fetchBackOffMs))
@@ -140,6 +141,7 @@ abstract class AbstractFetcherThread(name: String,
                     fetcherLagStats.getAndMaybePut(topic, partitionId).lag = Math.max(0L, partitionData.highWatermark - newOffset)
                     fetcherStats.byteRate.mark(validBytes)
                     // Once we hand off the partition data to the subclass, we can't mess with it any more in this thread
+                    // 处理拉到的分区数据
                     processPartitionData(topicAndPartition, currentPartitionFetchState.offset, partitionData)
                   } catch {
                     case ime: CorruptRecordException =>

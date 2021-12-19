@@ -380,9 +380,11 @@ class Log(val dir: File,
         }
 
         // maybe roll the log if this segment is full
+        // 是否开新的segment
         val segment = maybeRoll(validMessages.sizeInBytes)
 
         // now append to the log
+        // 写index、log
         segment.append(appendInfo.firstOffset, validMessages)
 
         // increment the log end offset
@@ -391,6 +393,7 @@ class Log(val dir: File,
         trace("Appended message set to log %s with first offset: %d, next offset: %d, and messages: %s"
           .format(this.name, appendInfo.firstOffset, nextOffsetMetadata.messageOffset, validMessages))
 
+        // 超过一定数量的message未刷到磁盘时，强制flush
         if (unflushedMessages >= config.flushInterval)
           flush()
 
@@ -529,6 +532,7 @@ class Log(val dir: File,
           entry.getValue.size
         }
       }
+      // read
       val fetchInfo = entry.getValue.read(startOffset, maxOffset, maxLength, maxPosition)
       if(fetchInfo == null) {
         entry = segments.higherEntry(entry.getKey)
@@ -616,6 +620,7 @@ class Log(val dir: File,
    */
   private def maybeRoll(messagesSize: Int): LogSegment = {
     val segment = activeSegment
+    // 默认1G
     if (segment.size > config.segmentSize - messagesSize ||
         segment.size > 0 && time.milliseconds - segment.created > config.segmentMs - segment.rollJitterMs ||
         segment.index.isFull) {
@@ -627,6 +632,7 @@ class Log(val dir: File,
                     segment.index.maxEntries,
                     time.milliseconds - segment.created,
                     config.segmentMs - segment.rollJitterMs))
+      // 开辟个新的segment
       roll()
     } else {
       segment
@@ -642,7 +648,9 @@ class Log(val dir: File,
     val start = time.nanoseconds
     lock synchronized {
       val newOffset = logEndOffset
+      // 用LEO创建个新的log文件
       val logFile = logFilename(dir, newOffset)
+      // 新的index文件
       val indexFile = indexFilename(dir, newOffset)
       for(file <- List(logFile, indexFile); if file.exists) {
         warn("Newly rolled segment file " + file.getName + " already exists; deleting it first")
@@ -656,6 +664,7 @@ class Log(val dir: File,
           entry.getValue.log.trim()
         }
       }
+      // 构建segment
       val segment = new LogSegment(dir,
                                    startOffset = newOffset,
                                    indexIntervalBytes = config.indexInterval,

@@ -332,6 +332,7 @@ class KafkaApis(val requestChannel: RequestChannel,
     }
 
     // the callback for sending a produce response
+    // 响应回调函数
     def sendResponseCallback(responseStatus: Map[TopicPartition, PartitionResponse]) {
 
       val mergedResponseStatus = responseStatus ++ unauthorizedRequestInfo.mapValues(_ =>
@@ -377,7 +378,7 @@ class KafkaApis(val requestChannel: RequestChannel,
             // updating this part of the code to handle it properly.
             case version => throw new IllegalArgumentException(s"Version `$version` of ProduceRequest is not handled. Code must be updated.")
           }
-
+          // 发送响应
           requestChannel.sendResponse(new RequestChannel.Response(request, new ResponseSend(request.connectionId, respHeader, respBody)))
         }
       }
@@ -385,6 +386,7 @@ class KafkaApis(val requestChannel: RequestChannel,
       // When this callback is triggered, the remote API call has completed
       request.apiRemoteCompleteTimeMs = SystemTime.milliseconds
 
+      // 回调callback
       quotaManagers(ApiKeys.PRODUCE.id).recordAndMaybeThrottle(
         request.header.clientId,
         numBytesAppended,
@@ -402,6 +404,7 @@ class KafkaApis(val requestChannel: RequestChannel,
       }
 
       // call the replica manager to append messages to the replicas
+      // 写入message
       replicaManager.appendMessages(
         produceRequest.timeout.toLong,
         produceRequest.acks,

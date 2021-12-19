@@ -79,6 +79,7 @@ class ZookeeperLeaderElector(controllerContext: ControllerContext,
                                                       controllerContext.zkUtils.zkConnection.getZookeeper,
                                                       JaasUtils.isZkSecurityEnabled())
       zkCheckedEphemeral.create()
+      // 创建临时节点成功，则说明选举成功
       info(brokerId + " successfully elected as leader")
       leaderId = brokerId
       onBecomingLeader()
@@ -123,6 +124,7 @@ class ZookeeperLeaderElector(controllerContext: ControllerContext,
     def handleDataChange(dataPath: String, data: Object) {
       inLock(controllerContext.controllerLock) {
         val amILeaderBeforeDataChange = amILeader
+        // 解析出 leaderId
         leaderId = KafkaController.parseControllerId(data.toString)
         info("New leader is %d".format(leaderId))
         // The old leader needs to resign leadership if it is no longer the leader
@@ -143,6 +145,7 @@ class ZookeeperLeaderElector(controllerContext: ControllerContext,
           .format(brokerId, dataPath))
         if(amILeader)
           onResigningAsLeader()
+        // 参与选举
         elect
       }
     }

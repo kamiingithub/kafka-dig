@@ -58,6 +58,7 @@ class LogManager(val logDirs: Array[File],
   createAndValidateLogDirs(logDirs)
   private val dirLocks = lockLogDirs(logDirs)
   private val recoveryPointCheckpoints = logDirs.map(dir => (dir, new OffsetCheckpoint(new File(dir, RecoveryPointCheckpointFile)))).toMap
+  // 加载磁盘的log文件，并实例化
   loadLogs()
 
   // public, so we can access this from kafka.admin.DeleteTopicTest

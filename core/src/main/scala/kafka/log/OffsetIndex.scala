@@ -72,6 +72,7 @@ class OffsetIndex(@volatile private[this] var _file: File, val baseOffset: Long,
 
       /* memory-map the file */
       val len = raf.length()
+      // 读写模式
       val idx = raf.getChannel.map(FileChannel.MapMode.READ_WRITE, 0, len)
 
       /* set the position in the index for the next entry */
@@ -207,8 +208,9 @@ class OffsetIndex(@volatile private[this] var _file: File, val baseOffset: Long,
       require(!isFull, "Attempt to append to a full index (size = " + _entries + ").")
       if (_entries == 0 || offset > _lastOffset) {
         debug("Adding index entry %d => %d to %s.".format(offset, position, _file.getName))
-        mmap.putInt((offset - baseOffset).toInt)
-        mmap.putInt(position)
+        // mmap 文件映射内存技术
+        mmap.putInt((offset - baseOffset).toInt) // 稀疏索引的物理offset
+        mmap.putInt(position) // log的offset
         _entries += 1
         _lastOffset = offset
         require(_entries * 8 == mmap.position, _entries + " entries but file position in index is " + mmap.position + ".")

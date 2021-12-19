@@ -51,6 +51,7 @@ import scala.util.control.{ControlThrowable, NonFatal}
 class SocketServer(val config: KafkaConfig, val metrics: Metrics, val time: Time) extends Logging with KafkaMetricsGroup {
 
   private val endpoints = config.listeners
+  // 默认3
   private val numProcessorThreads = config.numNetworkThreads
   private val maxQueuedRequests = config.queuedMaxRequests
   private val totalProcessorThreads = numProcessorThreads * endpoints.size
@@ -89,6 +90,7 @@ class SocketServer(val config: KafkaConfig, val metrics: Metrics, val time: Time
         val protocol = endpoint.protocolType
         val processorEndIndex = processorBeginIndex + numProcessorThreads
 
+        // 默认3个processors
         for (i <- processorBeginIndex until processorEndIndex)
           processors(i) = newProcessor(i, connectionQuotas, protocol)
 
@@ -96,6 +98,7 @@ class SocketServer(val config: KafkaConfig, val metrics: Metrics, val time: Time
           processors.slice(processorBeginIndex, processorEndIndex), connectionQuotas)
         acceptors.put(endpoint, acceptor)
         Utils.newThread("kafka-socket-acceptor-%s-%d".format(protocol.toString, endpoint.port), acceptor, false).start()
+        // 阻塞至启动
         acceptor.awaitStartup()
 
         processorBeginIndex = processorEndIndex
@@ -250,6 +253,7 @@ private[kafka] class Acceptor(val endPoint: EndPoint,
    * Accept loop that checks for new connection attempts
    */
   def run() {
+    // 注册 OP_ACCEPT
     serverChannel.register(nioSelector, SelectionKey.OP_ACCEPT)
     startupComplete()
     try {
@@ -408,8 +412,10 @@ private[kafka] class Processor(val id: Int,
         // setup any new connections that have been queued up
         configureNewConnections()
         // register any new responses for writing
+        // 从responseQueues获取response放入kafkaChannel，并关注OP_WRITE
         processNewResponses()
         poll()
+        // 把接收到的完整请求放进requestQueue
         processCompletedReceives()
         processCompletedSends()
         processDisconnected()
@@ -503,6 +509,10 @@ private[kafka] class Processor(val id: Int,
         throw new IllegalStateException(s"Send for ${send.destination} completed, but not in `inflightResponses`")
       }
       resp.request.updateRequestMetrics()
+      // 只有在发送成功之后，才重新关注OP_READ
+      /**
+       * @see org.apache.kafka.common.network.Selector#addToCompletedReceives()
+       */
       selector.unmute(send.destination)
     }
   }
@@ -539,6 +549,7 @@ private[kafka] class Processor(val id: Int,
         val remoteHost = channel.socket().getInetAddress.getHostAddress
         val remotePort = channel.socket().getPort
         val connectionId = ConnectionId(localHost, localPort, remoteHost, remotePort).toString
+        // 注册OP_READ
         selector.register(connectionId, channel)
       } catch {
         // We explicitly catch all non fatal exceptions and close the socket to avoid a socket leak. The other

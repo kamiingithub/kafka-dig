@@ -78,11 +78,14 @@ class LogSegment(val log: FileMessageSet,
     if (messages.sizeInBytes > 0) {
       trace("Inserting %d bytes at offset %d at position %d".format(messages.sizeInBytes, offset, log.sizeInBytes()))
       // append an entry to the index (if needed)
+      // 稀疏索引，默认4096
       if(bytesSinceLastIndexEntry > indexIntervalBytes) {
+        // 顺序写index(mmap)
         index.append(offset, log.sizeInBytes())
         this.bytesSinceLastIndexEntry = 0
       }
       // append the messages
+      // 顺序写log(os cache)
       log.append(messages)
       this.bytesSinceLastIndexEntry += messages.sizeInBytes
     }
@@ -102,6 +105,7 @@ class LogSegment(val log: FileMessageSet,
    */
   @threadsafe
   private[log] def translateOffset(offset: Long, startingFilePosition: Int = 0): OffsetPosition = {
+    // 二分查找
     val mapping = index.lookup(offset)
     log.searchFor(offset, max(mapping.position, startingFilePosition))
   }
@@ -124,6 +128,7 @@ class LogSegment(val log: FileMessageSet,
       throw new IllegalArgumentException("Invalid max size for log read (%d)".format(maxSize))
 
     val logSize = log.sizeInBytes // this may change, need to save a consistent copy
+    // 根据稀疏索引来确定从某个segment的某个物理位置开始读取
     val startPosition = translateOffset(startOffset)
 
     // if the start position is already off the end of the log, return null
@@ -157,6 +162,7 @@ class LogSegment(val log: FileMessageSet,
         min(min(maxPosition, endPosition) - startPosition.position, maxSize).toInt
     }
 
+    // read
     FetchDataInfo(offsetMetadata, log.read(startPosition.position, length))
   }
 

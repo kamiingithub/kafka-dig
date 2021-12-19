@@ -579,7 +579,9 @@ public class Selector implements Selectable {
             while (iter.hasNext()) {
                 Map.Entry<KafkaChannel, Deque<NetworkReceive>> entry = iter.next();
                 KafkaChannel channel = entry.getKey();
-                if (!channel.isMute()) {// 可读
+                // 这里的意思是：一个kafkaChannel的completedReceives里只能有一个networkReceive
+                // 当前一个请求的响应发送出去之后，才会重新关注OP_READ，才会移到completedReceives进行处理
+                if (!channel.isMute()) {
                     Deque<NetworkReceive> deque = entry.getValue();
                     NetworkReceive networkReceive = deque.poll();
                     // 移到completedReceives

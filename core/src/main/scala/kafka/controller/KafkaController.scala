@@ -139,7 +139,7 @@ object KafkaController extends Logging {
       Json.parseFull(controllerInfoString) match {
         case Some(m) =>
           val controllerInfo = m.asInstanceOf[Map[String, Any]]
-          return controllerInfo.get("brokerid").get.asInstanceOf[Int]
+          controllerInfo.get("brokerid").get.asInstanceOf[Int]
         case None => throw new KafkaException("Failed to parse the controller info json [%s].".format(controllerInfoString))
       }
     } catch {
@@ -317,6 +317,7 @@ class KafkaController(val config : KafkaConfig, zkUtils: ZkUtils, val brokerStat
    * If it encounters any unexpected exception/error while becoming controller, it resigns as the current controller.
    * This ensures another controller election will be triggered and there will always be an actively serving controller
    */
+  // 成功晋升controller
   def onControllerFailover() {
     if(isRunning) {
       info("Broker %d starting become controller state transition".format(config.brokerId))
@@ -504,6 +505,7 @@ class KafkaController(val config : KafkaConfig, zkUtils: ZkUtils, val brokerStat
     info("New topic creation callback for %s".format(newPartitions.mkString(",")))
     // subscribe to partition changes
     topics.foreach(topic => partitionStateMachine.registerPartitionChangeListener(topic))
+    // 处理分配方案
     onNewPartitionCreation(newPartitions)
   }
 
@@ -681,6 +683,7 @@ class KafkaController(val config : KafkaConfig, zkUtils: ZkUtils, val brokerStat
       info("Controller starting up")
       registerSessionExpirationListener()
       isRunning = true
+      // controller选举 监听/controller
       controllerElector.startup
       info("Controller startup complete")
     }
