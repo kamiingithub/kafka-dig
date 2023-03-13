@@ -172,7 +172,7 @@ public final class RecordAccumulator {
             synchronized (dq) {
                 if (closed)
                     throw new IllegalStateException("Cannot send after the producer is closed.");
-                // 尝试把record加到batch里
+                // 1.先尝试把record加到已有的batch里
                 RecordAppendResult appendResult = tryAppend(timestamp, key, value, callback, dq);
                 if (appendResult != null)
                     // 成功append到已有的batch里
@@ -180,11 +180,11 @@ public final class RecordAccumulator {
             }
 
             // we don't have an in-progress record batch try to allocate a new batch
-            // 没有可用的batch，所以分配个新的batch
+            // 2.没有可用的batch，所以分配个新的batch
             // 比batchSize小就用batchSize， 否则用真实的大小
             int size = Math.max(this.batchSize, Records.LOG_OVERHEAD + Record.recordSize(key, value));
             log.trace("Allocating a new {} byte message buffer for topic {} partition {}", size, tp.topic(), tp.partition());
-            // 分配内存buffer（batchSize的从free中拿内存，否则从buffer pool中的其他地方分配内存）
+            // 3.分配内存buffer（batchSize的从free中拿内存，否则从buffer pool中的其他地方分配内存）
             ByteBuffer buffer = free.allocate(size, maxTimeToBlock);
             // 这里用了dp的分段锁
             synchronized (dq) {
@@ -192,7 +192,7 @@ public final class RecordAccumulator {
                 if (closed)
                     throw new IllegalStateException("Cannot send after the producer is closed.");
 
-                // 尝试再次把record加到batch里
+                // 4.再次尝试再次把record加到batch里
                 RecordAppendResult appendResult = tryAppend(timestamp, key, value, callback, dq);
                 if (appendResult != null) {
                     // Somebody else found us a batch, return the one we waited for! Hopefully this doesn't happen often...
@@ -200,10 +200,11 @@ public final class RecordAccumulator {
                     free.deallocate(buffer);
                     return appendResult;
                 }
+                // 根据batchSize构建实际存放数据的数据结构
                 MemoryRecords records = MemoryRecords.emptyRecords(buffer, compression, this.batchSize);
-                // 构造新batch
+                // 5.构造新batch
                 RecordBatch batch = new RecordBatch(tp, records, time.milliseconds());
-                // append进这个batch
+                // 6.append进这个batch
                 FutureRecordMetadata future = Utils.notNull(batch.tryAppend(timestamp, key, value, callback, time.milliseconds()));
 
                 // 加到deque尾部

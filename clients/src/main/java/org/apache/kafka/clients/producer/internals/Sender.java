@@ -288,6 +288,7 @@ public class Sender implements Runnable {
                                                 produceResponse.getThrottleTime());
             } else {
                 // this is the acks = 0 case, just complete all requests
+                // acks = 0 不需要等待response，直接complete
                 for (RecordBatch batch : batches.values())
                     completeBatch(batch, Errors.NONE, -1L, Record.NO_TIMESTAMP, correlationId, now);
             }
@@ -372,7 +373,7 @@ public class Sender implements Runnable {
         RequestSend send = new RequestSend(Integer.toString(destination),
                                            this.client.nextRequestHeader(ApiKeys.PRODUCE),
                                            request.toStruct());
-        // 回调函数
+        // 发送完成的回调函数
         RequestCompletionHandler callback = new RequestCompletionHandler() {
             public void onComplete(ClientResponse response) {
                 handleProduceResponse(response, recordsByPartition, time.milliseconds());
